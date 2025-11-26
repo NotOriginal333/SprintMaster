@@ -29,6 +29,7 @@ INSTALLED_APPS = [
     'users',
     'projects',
     'sprints',
+    'reports',
     'tasks',
 ]
 
@@ -95,7 +96,7 @@ REST_FRAMEWORK = {
 CACHES = {
     "default": {
         "BACKEND": "django_redis.cache.RedisCache",
-        "LOCATION": os.getenv("REDIS_URL", "redis://redis:6379/1"), # Використовуємо DB 1 для кешу, DB 0 для Celery
+        "LOCATION": os.getenv("REDIS_URL", "redis://redis:6379/1"),  # Використовуємо DB 1 для кешу, DB 0 для Celery
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
         }
