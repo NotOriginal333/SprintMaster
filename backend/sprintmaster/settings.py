@@ -10,6 +10,20 @@ SECRET_KEY = os.getenv('SECRET_KEY', 'changeme')
 DEBUG = int(os.getenv("DEBUG", default=1))
 ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "*").split(",")
 
+cors_origins_env = os.getenv("CORS_ALLOWED_ORIGINS")
+
+if cors_origins_env:
+    CORS_ALLOWED_ORIGINS = cors_origins_env.split(",")
+else:
+    CORS_ALLOWED_ORIGINS = ["http://localhost:5173"]
+
+CORS_ALLOW_METHODS = [
+    "DELETE", "GET", "OPTIONS", "PATCH", "POST", "PUT",
+]
+CORS_ALLOW_HEADERS = [
+    "accept", "content-type", "authorization", "origin", "x-csrftoken",
+]
+
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
@@ -34,9 +48,9 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
-    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
