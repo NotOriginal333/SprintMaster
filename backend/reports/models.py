@@ -13,7 +13,6 @@ class ProjectReport(models.Model):
     generated_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True)
     report_type = models.CharField(max_length=20, choices=Type.choices, default=Type.PROJECT_STATUS)
 
-    # Store result data as JSON to avoid recalculation
     data = models.JSONField(default=dict, verbose_name="Дані звіту")
 
     created_at = models.DateTimeField(auto_now_add=True)

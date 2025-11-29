@@ -1,8 +1,10 @@
 from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework_simplejwt.views import TokenObtainPairView
 from django.contrib.auth import get_user_model
+
 from common.pagination import StandardResultsSetPagination
-from .serializers import UserSerializer
+from .serializers import UserSerializer, CustomTokenObtainPairSerializer
 
 User = get_user_model()
 
@@ -25,3 +27,10 @@ class UserViewSet(viewsets.ModelViewSet):
             permission_classes = [IsAuthenticated]
 
         return [permission() for permission in permission_classes]
+
+
+class CustomTokenObtainPairView(TokenObtainPairView):
+    """
+    Custom view for JWT.
+    """
+    serializer_class = CustomTokenObtainPairSerializer

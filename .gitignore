@@ -3,5 +3,7 @@
 **/.env
 .env*
 
+.idea
+
 !.env.example
 !.env.monitoring.example
