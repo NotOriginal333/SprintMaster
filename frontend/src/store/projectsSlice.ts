@@ -1,6 +1,6 @@
-import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
+import {createSlice, createAsyncThunk} from '@reduxjs/toolkit';
 import api from '../api/axios';
-import type { Project } from '../types';
+import type {Project} from '../types';
 
 interface ProjectsState {
     list: Project[];
@@ -24,6 +24,14 @@ export const fetchProjectById = createAsyncThunk('projects/fetchOne', async (id:
     return response.data;
 });
 
+export const addMemberToProject = createAsyncThunk(
+    'projects/addMember',
+    async ({projectId, memberIds}: { projectId: number, memberIds: number[] }) => {
+        const response = await api.patch(`projects/${projectId}/`, {members: memberIds});
+        return response.data;
+    }
+);
+
 export const createProject = createAsyncThunk(
     'projects/create',
     async (data: { name: string; description: string; start_date: string; manager: number }) => {
@@ -44,8 +52,15 @@ const projectsSlice = createSlice({
             .addCase(fetchProjectById.fulfilled, (state, action) => {
                 state.currentProject = action.payload;
             })
+
             .addCase(createProject.fulfilled, (state, action) => {
                 state.list.unshift(action.payload);
+            })
+
+            .addCase(addMemberToProject.fulfilled, (state, action) => {
+                if (state.currentProject && state.currentProject.id === action.payload.id) {
+                    state.currentProject = action.payload;
+                }
             });
     },
 });

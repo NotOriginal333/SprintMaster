@@ -26,7 +26,6 @@ class Task(models.Model):
         HIGH = "HIGH", _("Високий")
         CRITICAL = "CRITICAL", _("Критичний")
 
-    # Fibonacci sequence for Agile estimation
     STORY_POINTS_CHOICES = (
         (1, '1 SP'), (2, '2 SP'), (3, '3 SP'),
         (5, '5 SP'), (8, '8 SP'), (13, '13 SP'), (21, '21 SP'),

@@ -1,113 +1,322 @@
-import React, { useState } from 'react';
-import { useParams } from 'react-router-dom';
-import { Typography, Box, Button, Chip, IconButton, Avatar } from '@mui/material';
-import { Add as AddIcon, MoreHoriz } from '@mui/icons-material';
-import { BoardContainer, KanbanColumn, TaskCard } from './ProjectDetails.styles';
-import { RoleGuard } from '../../utils/rbac';
-import { TaskModal } from '../../components/TaskModal/TaskModal';
+import React, {useEffect, useState} from 'react';
+import {useParams, useNavigate} from 'react-router-dom';
+import {useDispatch, useSelector} from 'react-redux';
+import {
+    Typography, Box, Button, Chip, IconButton, Avatar, Select, MenuItem,
+    AvatarGroup, Tooltip, LinearProgress
+} from '@mui/material';
+import {
+    Add as AddIcon, MoreHoriz, BugReport as BugIcon,
+    CheckCircle, CalendarMonth as TimelineIcon, Check as CheckIcon
+} from '@mui/icons-material';
+
+// Стилі
+import {BoardContainer, KanbanColumn, TaskCard} from './ProjectDetails.styles';
+
+// Утиліти та Компоненти
+import {RoleGuard} from '../../utils/rbac';
+import {TaskModal} from '../../components/TaskModal/TaskModal';
+import {CreateTaskModal} from '../../components/CreateTaskModal/CreateTaskModal';
+import {CreateSprintModal} from '../../components/CreateSprintModal/CreateSprintModal';
+import {AddMemberModal} from '../../components/AddMemberModal/AddMemberModal';
+import {ConfirmationDialog} from '../../components/ConfirmationDialog/ConfirmationDialog'; // <--- Імпорт діалогу
+
+// Redux
+import type {AppDispatch, RootState} from '../../store';
+import {fetchTasks} from '../../store/tasksSlice';
+import {fetchSprints, completeSprint} from '../../store/sprintsSlice';
+import {fetchProjectById} from '../../store/projectsSlice';
 
 const COLUMNS = [
-    { id: 'NEW', title: 'To Do' },
-    { id: 'IN_PROGRESS', title: 'In Progress' },
-    { id: 'REVIEW', title: 'Code Review' },
-    { id: 'DONE', title: 'Done' },
-];
-
-const MOCK_TASKS = [
-    { id: 101, title: 'Налаштувати Docker', description: 'Описати Dockerfile та compose', status: 'DONE', priority: 'HIGH', sp: 5, assignee: 'Ivan' },
-    { id: 102, title: 'Створити сторінку логіну', description: 'Використати React Hook Form', status: 'IN_PROGRESS', priority: 'CRITICAL', sp: 3, assignee: 'Maria' },
-    { id: 103, title: 'Верстка Канбан дошки', description: 'MUI Grid та Drag and Drop', status: 'NEW', priority: 'MEDIUM', sp: 8, assignee: null },
+    {id: 'NEW', title: 'To Do'},
+    {id: 'IN_PROGRESS', title: 'In Progress'},
+    {id: 'REVIEW', title: 'Code Review'},
+    {id: 'DONE', title: 'Done'},
 ];
 
 export const ProjectDetailsPage = () => {
-  const { id } = useParams();
+    const {id} = useParams();
+    const navigate = useNavigate();
+    const dispatch = useDispatch<AppDispatch>();
 
-  // Логіка модального вікна
-  const [selectedTask, setSelectedTask] = useState<any | null>(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
+    // Дістаємо дані зі стору
+    const {list: tasks, loading: tasksLoading} = useSelector((state: RootState) => state.tasks);
+    const {list: sprints} = useSelector((state: RootState) => state.sprints);
+    const {currentProject} = useSelector((state: RootState) => state.projects);
 
-  const handleTaskClick = (task: any) => {
-    setSelectedTask(task);
-    setIsModalOpen(true);
-  };
+    // Стейт фільтрації та модалок
+    const [selectedSprintId, setSelectedSprintId] = useState<number | 'all'>('all');
 
-  const handleCloseModal = () => {
-    setIsModalOpen(false);
-    setSelectedTask(null);
-  };
+    // Зберігаємо ID задачі для модалки редагування
+    const [detailTaskId, setDetailTaskId] = useState<number | null>(null);
 
-  return (
-    <Box>
-      <Box display="flex" justifyContent="space-between" alignItems="center" mb={4}>
+    const [isTaskCreateOpen, setTaskCreateOpen] = useState(false);
+    const [isSprintCreateOpen, setSprintCreateOpen] = useState(false);
+    const [isMembersOpen, setMembersOpen] = useState(false);
+
+    // Стейт для діалогу підтвердження завершення спринта
+    const [isConfirmOpen, setConfirmOpen] = useState(false);
+
+    // Завантаження даних при відкритті сторінки
+    useEffect(() => {
+        if (id) {
+            dispatch(fetchTasks(id));
+            dispatch(fetchSprints(id));
+            dispatch(fetchProjectById(id));
+        }
+    }, [dispatch, id]);
+
+    // Знаходимо об'єкти
+    const detailTask = tasks.find(t => t.id === detailTaskId) || null;
+    const currentSprintObj = sprints.find(s => s.id === selectedSprintId);
+
+    // Фільтрація задач для дошки
+    const filteredTasks = tasks.filter(t =>
+        selectedSprintId === 'all' ? true : t.project === Number(id) && t.sprint === selectedSprintId
+    );
+
+    // --- ЛОГІКА ЗАВЕРШЕННЯ СПРИНТА ---
+
+    // 1. Відкриваємо діалог
+    const onCompleteClick = () => {
+        if (selectedSprintId !== 'all') {
+            setConfirmOpen(true);
+        }
+    };
+
+    // 2. Виконуємо дію після підтвердження
+    const handleConfirmComplete = async () => {
+        try {
+            await dispatch(completeSprint(selectedSprintId as number)).unwrap();
+            // Оновлюємо задачі, бо частина піде в беклог
+            if (id) dispatch(fetchTasks(id));
+            // Перемикаємось на "Всі задачі", бо спринт закрився
+            setSelectedSprintId('all');
+        } catch (error) {
+            console.error("Помилка завершення спринта", error);
+        }
+    };
+
+    if (!id) return null;
+
+    return (
         <Box>
-            <Typography variant="h4" fontWeight="bold">Проєкт #{id}</Typography>
-            <Typography variant="body2" color="text.secondary">Активний спринт: Sprint #1</Typography>
-        </Box>
-        <Box>
-             {/* Тільки PM/ADMIN бачить налаштування */}
-             <RoleGuard allowedRoles={['PM', 'ADMIN']}>
-                <Button variant="outlined" sx={{ mr: 2 }}>Налаштування</Button>
-             </RoleGuard>
-
-             {/* Тільки PM/ADMIN створює задачі */}
-             <RoleGuard allowedRoles={['PM', 'ADMIN']}>
-                <Button variant="contained" startIcon={<AddIcon />}>Створити задачу</Button>
-             </RoleGuard>
-        </Box>
-      </Box>
-
-      {/* Канбан Дошка */}
-      <BoardContainer>
-        {COLUMNS.map((column) => (
-            <KanbanColumn key={column.id} elevation={0}>
-                <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
-                    <Typography variant="subtitle1" fontWeight="bold" color="text.secondary">
-                        {column.title}
+            {/* === HEADER === */}
+            <Box display="flex" justifyContent="space-between" alignItems="center" mb={4}>
+                {/* Ліва частина: Назва + Учасники + Спринт */}
+                <Box>
+                    <Typography variant="h4" fontWeight="bold">
+                        {currentProject?.name || `Project #${id}`}
                     </Typography>
-                    <Chip label={MOCK_TASKS.filter(t => t.status === column.id).length} size="small" />
-                </Box>
 
-                {MOCK_TASKS.filter(task => task.status === column.id).map(task => (
-                    <TaskCard
-                        key={task.id}
-                        elevation={1}
-                        onClick={() => handleTaskClick(task)} // Відкриття модалки
-                    >
-                        <Box display="flex" justifyContent="space-between" mb={1}>
-                            <Chip
-                                label={`${task.sp} SP`}
+                    <Box display="flex" alignItems="center" gap={3} mt={1}>
+                        {/* Блок вибору спринта */}
+                        <Box display="flex" alignItems="center" gap={1}>
+                            <Typography variant="body2" color="text.secondary">Спринт:</Typography>
+                            <Select
                                 size="small"
-                                color={task.priority === 'CRITICAL' ? 'error' : 'default'}
-                                variant="outlined"
-                                sx={{ height: 20, fontSize: '0.65rem' }}
-                            />
-                            <IconButton size="small"><MoreHoriz fontSize="small" /></IconButton>
-                        </Box>
-                        <Typography variant="body1" fontWeight="500" gutterBottom>
-                            {task.title}
-                        </Typography>
-                        <Box display="flex" justifyContent="space-between" alignItems="center" mt={2}>
-                            <Typography variant="caption" color="text.secondary">ID-{task.id}</Typography>
-                            {task.assignee ? (
-                                <Avatar sx={{ width: 24, height: 24, fontSize: '0.75rem', bgcolor: 'primary.main' }}>
-                                    {task.assignee[0]}
-                                </Avatar>
-                            ) : (
-                                <Typography variant="caption" color="text.disabled">Unassigned</Typography>
+                                value={selectedSprintId}
+                                onChange={(e) => setSelectedSprintId(e.target.value as number)}
+                                sx={{minWidth: 150, height: 32}}
+                            >
+                                <MenuItem value="all">Всі задачі</MenuItem>
+                                {sprints.map(s => (
+                                    <MenuItem key={s.id} value={s.id}>
+                                        {s.name} {s.is_active ? '(Active)' : ''}
+                                    </MenuItem>
+                                ))}
+                            </Select>
+
+                            {/* КНОПКА КАЛЕНДАРЯ СПРИНТА */}
+                            {selectedSprintId !== 'all' && (
+                                <Tooltip title="Відкрити хронологію та деталі спринту">
+                                    <IconButton
+                                        size="small"
+                                        onClick={() => navigate(`/dashboard/sprints/${selectedSprintId}`)}
+                                        color="primary"
+                                    >
+                                        <TimelineIcon/>
+                                    </IconButton>
+                                </Tooltip>
                             )}
                         </Box>
-                    </TaskCard>
-                ))}
-            </KanbanColumn>
-        ))}
-      </BoardContainer>
 
-      {/* Саме модальне вікно */}
-      <TaskModal
-        open={isModalOpen}
-        onClose={handleCloseModal}
-        task={selectedTask}
-      />
-    </Box>
-  );
+                        {/* Блок учасників */}
+                        <Box display="flex" alignItems="center" gap={1}>
+                            <AvatarGroup max={5}
+                                         sx={{'& .MuiAvatar-root': {width: 32, height: 32, fontSize: '0.8rem'}}}>
+                                {currentProject?.members_details?.map(m => (
+                                    <Tooltip key={m.id} title={`${m.first_name} ${m.last_name} (${m.role})`}>
+                                        <Avatar>{m.username[0].toUpperCase()}</Avatar>
+                                    </Tooltip>
+                                ))}
+                            </AvatarGroup>
+
+                            <RoleGuard allowedRoles={['PM', 'ADMIN']}>
+                                <Button size="small" onClick={() => setMembersOpen(true)}>
+                                    + Учасники
+                                </Button>
+                            </RoleGuard>
+                        </Box>
+                    </Box>
+                </Box>
+
+                {/* Права частина: Кнопки дій */}
+                <Box display="flex" gap={2}>
+                    {/* КНОПКА ЗАВЕРШЕННЯ СПРИНТА */}
+                    <RoleGuard allowedRoles={['PM', 'ADMIN']}>
+                        {selectedSprintId !== 'all' && currentSprintObj?.is_active && (
+                            <Button
+                                variant="outlined"
+                                color="success"
+                                startIcon={<CheckIcon/>}
+                                onClick={onCompleteClick} // <--- Виклик діалогу
+                            >
+                                Завершити спринт
+                            </Button>
+                        )}
+                    </RoleGuard>
+
+                    <RoleGuard allowedRoles={['PM', 'ADMIN']}>
+                        <Button variant="outlined" onClick={() => setSprintCreateOpen(true)}>
+                            Планувати спринт
+                        </Button>
+                    </RoleGuard>
+
+                    <RoleGuard allowedRoles={['PM', 'ADMIN']}>
+                        <Button variant="contained" startIcon={<AddIcon/>} onClick={() => setTaskCreateOpen(true)}>
+                            Створити задачу
+                        </Button>
+                    </RoleGuard>
+                </Box>
+            </Box>
+
+            {/* Лоадер */}
+            {tasksLoading && <LinearProgress sx={{mb: 2}}/>}
+
+            {/* === KANBAN BOARD === */}
+            <BoardContainer>
+                {COLUMNS.map((column) => (
+                    <KanbanColumn key={column.id} elevation={0}>
+                        <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
+                            <Typography variant="subtitle1" fontWeight="bold" color="text.secondary">
+                                {column.title}
+                            </Typography>
+                            <Chip label={filteredTasks.filter(t => t.status === column.id).length} size="small"/>
+                        </Box>
+
+                        {filteredTasks.filter(task => task.status === column.id).map(task => {
+                            // Підрахунок багів
+                            const bugs = task.bugs || [];
+                            const activeBugs = bugs.filter(b => b.status !== 'CLOSED' && b.status !== 'FIXED').length;
+                            const closedBugs = bugs.filter(b => b.status === 'CLOSED' || b.status === 'FIXED').length;
+
+                            return (
+                                <TaskCard key={task.id} elevation={1} onClick={() => setDetailTaskId(task.id)}>
+                                    <Box display="flex" justifyContent="space-between" mb={1}>
+                                        <Box display="flex" gap={1}>
+                                            <Chip
+                                                label={`${task.story_points} SP`}
+                                                size="small"
+                                                color={task.priority === 'CRITICAL' ? 'error' : 'default'}
+                                                variant="outlined"
+                                                sx={{height: 20, fontSize: '0.65rem'}}
+                                            />
+
+                                            {/* ЧЕРВОНИЙ: Активні баги */}
+                                            {activeBugs > 0 && (
+                                                <Tooltip title={`${activeBugs} активних помилок`}>
+                                                    <Chip
+                                                        icon={<BugIcon sx={{fontSize: '1rem !important'}}/>}
+                                                        label={activeBugs}
+                                                        size="small"
+                                                        color="error"
+                                                        sx={{height: 20, fontSize: '0.75rem', px: 0.5}}
+                                                    />
+                                                </Tooltip>
+                                            )}
+
+                                            {/* ЗЕЛЕНИЙ: Виправлені баги */}
+                                            {closedBugs > 0 && (
+                                                <Tooltip title={`${closedBugs} виправлених помилок`}>
+                                                    <Chip
+                                                        icon={<CheckCircle sx={{fontSize: '1rem !important'}}/>}
+                                                        label={closedBugs}
+                                                        size="small"
+                                                        color="success"
+                                                        variant="outlined"
+                                                        sx={{height: 20, fontSize: '0.75rem', px: 0.5}}
+                                                    />
+                                                </Tooltip>
+                                            )}
+                                        </Box>
+                                        <IconButton size="small"><MoreHoriz fontSize="small"/></IconButton>
+                                    </Box>
+
+                                    <Typography variant="body1" fontWeight="500" gutterBottom>
+                                        {task.title}
+                                    </Typography>
+
+                                    <Box display="flex" justifyContent="flex-end" alignItems="center" mt={2}>
+                                        {task.assignee ? (
+                                            <Tooltip title={task.assignee_details?.username || `User ${task.assignee}`}>
+                                                <Avatar
+                                                    sx={{
+                                                        width: 24,
+                                                        height: 24,
+                                                        fontSize: '0.75rem',
+                                                        bgcolor: 'primary.main'
+                                                    }}>
+                                                    {task.assignee_details?.username?.[0].toUpperCase() || '?'}
+                                                </Avatar>
+                                            </Tooltip>
+                                        ) : (
+                                            <Typography variant="caption" color="text.disabled">Unassigned</Typography>
+                                        )}
+                                    </Box>
+                                </TaskCard>
+                            );
+                        })}
+                    </KanbanColumn>
+                ))}
+            </BoardContainer>
+
+            {/* === MODALS === */}
+            <TaskModal
+                open={Boolean(detailTask)}
+                onClose={() => setDetailTaskId(null)}
+                task={detailTask}
+            />
+
+            <CreateTaskModal
+                open={isTaskCreateOpen}
+                onClose={() => setTaskCreateOpen(false)}
+                projectId={id}
+                sprintId={typeof selectedSprintId === 'number' ? selectedSprintId : undefined}
+            />
+
+            <CreateSprintModal
+                open={isSprintCreateOpen}
+                onClose={() => setSprintCreateOpen(false)}
+                projectId={id}
+            />
+
+            {currentProject && (
+                <AddMemberModal
+                    open={isMembersOpen}
+                    onClose={() => setMembersOpen(false)}
+                    project={currentProject}
+                />
+            )}
+
+            {/* ДІАЛОГ ПІДТВЕРДЖЕННЯ */}
+            <ConfirmationDialog
+                open={isConfirmOpen}
+                onClose={() => setConfirmOpen(false)}
+                onConfirm={handleConfirmComplete}
+                title="Завершити спринт?"
+                description="Всі незавершені задачі будуть автоматично перенесені в Backlog. Спринт стане неактивним."
+            />
+        </Box>
+    );
 };

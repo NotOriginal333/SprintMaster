@@ -6,6 +6,17 @@ export interface User {
     role: 'ADMIN' | 'PM' | 'DEV' | 'QA';
 }
 
+export interface BugReport {
+    id: number;
+    title: string;
+    description: string;
+    status: 'NEW' | 'CONFIRMED' | 'IN_PROGRESS' | 'FIXED' | 'CLOSED';
+    priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+    created_at: string;
+    reporter: number;
+    reporter_details?: User;
+}
+
 export interface Project {
     id: number;
     name: string;
@@ -13,8 +24,9 @@ export interface Project {
     status: 'ACTIVE' | 'ON_HOLD' | 'ARCHIVED';
     start_date: string;
     manager: number;
-    manager_details: User;
+    manager_details?: User;
     members: number[];
+    members_details?: User[];
 }
 
 export interface Task {
@@ -25,8 +37,10 @@ export interface Task {
     priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
     story_points: number;
     project: number;
+    sprint: number | null;
     assignee: number | null;
-    assignee_details: User | null;
+    assignee_details?: User | null;
+    bugs?: BugReport[];
 }
 
 export interface Report {
