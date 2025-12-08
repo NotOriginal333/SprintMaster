@@ -22,13 +22,15 @@ export const createTask = createAsyncThunk('tasks/create', async (data: any) => 
     return response.data;
 });
 
-export const updateTask = createAsyncThunk(
-    'tasks/update',
-    async ({id, data}: { id: number, data: any }) => {
-        const response = await api.patch(`tasks/${id}/`, data);
-        return response.data;
-    }
-);
+export const updateTask = createAsyncThunk('tasks/update', async ({id, data}: { id: number, data: any }) => {
+    const response = await api.patch(`tasks/${id}/`, data);
+    return response.data;
+});
+
+export const deleteTask = createAsyncThunk('tasks/delete', async (id: number) => {
+    await api.delete(`tasks/${id}/`);
+    return id;
+});
 
 const tasksSlice = createSlice({
     name: 'tasks',
@@ -44,9 +46,10 @@ const tasksSlice = createSlice({
             })
             .addCase(updateTask.fulfilled, (state, action) => {
                 const index = state.list.findIndex(t => t.id === action.payload.id);
-                if (index !== -1) {
-                    state.list[index] = action.payload;
-                }
+                if (index !== -1) state.list[index] = action.payload;
+            })
+            .addCase(deleteTask.fulfilled, (state, action) => {
+                state.list = state.list.filter(t => t.id !== action.payload);
             });
     },
 });

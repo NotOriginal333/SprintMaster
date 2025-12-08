@@ -79,6 +79,8 @@ class Task(models.Model):
         verbose_name=_("Оцінка складності (SP)")
     )
 
+    due_date = models.DateField(null=True, blank=True, verbose_name="Дедлайн")
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

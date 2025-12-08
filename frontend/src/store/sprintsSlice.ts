@@ -21,32 +21,31 @@ const initialState: SprintsState = {
     loading: false,
 };
 
-// Отримати спринти конкретного проєкту
 export const fetchSprints = createAsyncThunk('sprints/fetchByProject', async (projectId: string) => {
     const response = await api.get(`sprints/?project=${projectId}`);
     return response.data.results || [];
 });
 
-// Створити спринт
 export const createSprint = createAsyncThunk('sprints/create', async (data: any) => {
     const response = await api.post('sprints/', data);
     return response.data;
 });
 
-// Отримати таймлайн подій спринта
-export const fetchSprintTimeline = createAsyncThunk(
-    'sprints/fetchTimeline',
-    async (sprintId: string) => {
-        const response = await api.get(`sprints/${sprintId}/timeline/`);
-        return response.data;
-    }
-);
+export const fetchSprintTimeline = createAsyncThunk('sprints/fetchTimeline', async (sprintId: string) => {
+    const response = await api.get(`sprints/${sprintId}/timeline/`);
+    return response.data;
+});
 
-// 👇 НОВЕ: Завершити спринт
-export const completeSprint = createAsyncThunk(
-    'sprints/complete',
-    async (sprintId: number) => {
-        const response = await api.post(`sprints/${sprintId}/complete/`);
+export const completeSprint = createAsyncThunk('sprints/complete', async (sprintId: number) => {
+    const response = await api.post(`sprints/${sprintId}/complete/`);
+    return response.data;
+});
+
+// 👇 НОВЕ: Оновлення спринта
+export const updateSprint = createAsyncThunk(
+    'sprints/update',
+    async ({id, data}: { id: number, data: any }) => {
+        const response = await api.patch(`sprints/${id}/`, data);
         return response.data;
     }
 );
@@ -63,12 +62,14 @@ const sprintsSlice = createSlice({
             .addCase(createSprint.fulfilled, (state, action) => {
                 state.list.unshift(action.payload);
             })
-            // Оновлюємо стан спринта на "неактивний" після завершення
             .addCase(completeSprint.fulfilled, (state, action) => {
                 const sprint = state.list.find(s => s.id === action.meta.arg);
-                if (sprint) {
-                    sprint.is_active = false;
-                }
+                if (sprint) sprint.is_active = false;
+            })
+            // Обробка оновлення
+            .addCase(updateSprint.fulfilled, (state, action) => {
+                const index = state.list.findIndex(s => s.id === action.payload.id);
+                if (index !== -1) state.list[index] = action.payload;
             });
     },
 });

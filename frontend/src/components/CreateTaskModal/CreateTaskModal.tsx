@@ -12,19 +12,17 @@ interface Props {
     open: boolean;
     onClose: () => void;
     projectId: string;
-    sprintId?: number; // Це буде дефолтне значення
+    sprintId?: number;
 }
 
 export const CreateTaskModal = ({open, onClose, projectId, sprintId}: Props) => {
     const {register, handleSubmit, reset} = useForm();
     const dispatch = useDispatch<AppDispatch>();
 
-    // Дістаємо дані з Redux
     const {currentProject} = useSelector((state: RootState) => state.projects);
     const {list: sprints} = useSelector((state: RootState) => state.sprints);
 
     const onSubmit = async (data: any) => {
-        // Якщо вибрано пустий рядок -> null (Backlog)
         const finalSprintId = data.sprint ? Number(data.sprint) : null;
 
         await dispatch(createTask({
@@ -37,7 +35,6 @@ export const CreateTaskModal = ({open, onClose, projectId, sprintId}: Props) => 
         onClose();
     };
 
-    // Формуємо список виконавців
     const assignees = currentProject ? [
         currentProject.manager_details,
         ...(currentProject.members_details || [])
@@ -49,14 +46,12 @@ export const CreateTaskModal = ({open, onClose, projectId, sprintId}: Props) => 
             <form onSubmit={handleSubmit(onSubmit)}>
                 <DialogContent>
                     <Box display="flex" flexDirection="column" gap={2}>
-                        {/* Вибір Спринта */}
                         <TextField
                             select
                             label="Спринт"
                             fullWidth
                             defaultValue={sprintId || ""}
                             inputProps={register('sprint')}
-                            helperText="Залиште пустим, щоб додати в Backlog"
                         >
                             <MenuItem value=""><em>Backlog (Без спринта)</em></MenuItem>
                             {sprints.map(s => (
@@ -86,15 +81,25 @@ export const CreateTaskModal = ({open, onClose, projectId, sprintId}: Props) => 
                             </TextField>
                         </Box>
 
-                        <TextField select label="Виконавець" fullWidth defaultValue=""
-                                   inputProps={register('assignee')}>
-                            <MenuItem value="">Unassigned</MenuItem>
-                            {assignees.map((u: any) => (
-                                <MenuItem key={u.id} value={u.id}>
-                                    {u.first_name} {u.last_name} ({u.role})
-                                </MenuItem>
-                            ))}
-                        </TextField>
+                        <Box display="flex" gap={2}>
+                            <TextField
+                                label="Дедлайн"
+                                type="date"
+                                fullWidth
+                                InputLabelProps={{shrink: true}}
+                                {...register('due_date')}
+                            />
+
+                            <TextField select label="Виконавець" fullWidth defaultValue=""
+                                       inputProps={register('assignee')}>
+                                <MenuItem value="">Unassigned</MenuItem>
+                                {assignees.map((u: any) => (
+                                    <MenuItem key={u.id} value={u.id}>
+                                        {u.first_name} {u.last_name} ({u.role})
+                                    </MenuItem>
+                                ))}
+                            </TextField>
+                        </Box>
                     </Box>
                 </DialogContent>
                 <DialogActions>

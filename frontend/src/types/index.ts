@@ -41,6 +41,7 @@ export interface Task {
     assignee: number | null;
     assignee_details?: User | null;
     bugs?: BugReport[];
+    due_date: string | null;
 }
 
 export interface Report {

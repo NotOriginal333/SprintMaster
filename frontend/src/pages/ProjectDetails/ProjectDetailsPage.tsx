@@ -3,29 +3,27 @@ import {useParams, useNavigate} from 'react-router-dom';
 import {useDispatch, useSelector} from 'react-redux';
 import {
     Typography, Box, Button, Chip, IconButton, Avatar, Select, MenuItem,
-    AvatarGroup, Tooltip, LinearProgress
+    AvatarGroup, Tooltip, LinearProgress, Menu, ListItemIcon, ListItemText
 } from '@mui/material';
 import {
     Add as AddIcon, MoreHoriz, BugReport as BugIcon,
-    CheckCircle, CalendarMonth as TimelineIcon, Check as CheckIcon
+    CheckCircle, CalendarMonth as TimelineIcon, Check as CheckIcon,
+    Settings as SettingsIcon, Edit as EditIcon, Delete as DeleteIcon
 } from '@mui/icons-material';
 
-// Стилі
 import {BoardContainer, KanbanColumn, TaskCard} from './ProjectDetails.styles';
-
-// Утиліти та Компоненти
 import {RoleGuard} from '../../utils/rbac';
 import {TaskModal} from '../../components/TaskModal/TaskModal';
 import {CreateTaskModal} from '../../components/CreateTaskModal/CreateTaskModal';
 import {CreateSprintModal} from '../../components/CreateSprintModal/CreateSprintModal';
 import {AddMemberModal} from '../../components/AddMemberModal/AddMemberModal';
-import {ConfirmationDialog} from '../../components/ConfirmationDialog/ConfirmationDialog'; // <--- Імпорт діалогу
+import {ConfirmationDialog} from '../../components/ConfirmationDialog/ConfirmationDialog';
+import {EditProjectModal} from '../../components/EditProjectModal/EditProjectModal';
 
-// Redux
 import type {AppDispatch, RootState} from '../../store';
 import {fetchTasks} from '../../store/tasksSlice';
 import {fetchSprints, completeSprint} from '../../store/sprintsSlice';
-import {fetchProjectById} from '../../store/projectsSlice';
+import {fetchProjectById, deleteProject} from '../../store/projectsSlice';
 
 const COLUMNS = [
     {id: 'NEW', title: 'To Do'},
@@ -39,25 +37,24 @@ export const ProjectDetailsPage = () => {
     const navigate = useNavigate();
     const dispatch = useDispatch<AppDispatch>();
 
-    // Дістаємо дані зі стору
     const {list: tasks, loading: tasksLoading} = useSelector((state: RootState) => state.tasks);
     const {list: sprints} = useSelector((state: RootState) => state.sprints);
     const {currentProject} = useSelector((state: RootState) => state.projects);
 
-    // Стейт фільтрації та модалок
     const [selectedSprintId, setSelectedSprintId] = useState<number | 'all'>('all');
-
-    // Зберігаємо ID задачі для модалки редагування
     const [detailTaskId, setDetailTaskId] = useState<number | null>(null);
 
     const [isTaskCreateOpen, setTaskCreateOpen] = useState(false);
     const [isSprintCreateOpen, setSprintCreateOpen] = useState(false);
     const [isMembersOpen, setMembersOpen] = useState(false);
+    const [isEditProjectOpen, setEditProjectOpen] = useState(false); // <--- Стейт редагування
 
-    // Стейт для діалогу підтвердження завершення спринта
-    const [isConfirmOpen, setConfirmOpen] = useState(false);
+    const [isConfirmOpen, setConfirmOpen] = useState(false); // Для спринта
+    const [isDeleteProjectOpen, setDeleteProjectOpen] = useState(false); // Для проєкту
 
-    // Завантаження даних при відкритті сторінки
+    const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+    const openMenu = Boolean(anchorEl);
+
     useEffect(() => {
         if (id) {
             dispatch(fetchTasks(id));
@@ -66,34 +63,34 @@ export const ProjectDetailsPage = () => {
         }
     }, [dispatch, id]);
 
-    // Знаходимо об'єкти
     const detailTask = tasks.find(t => t.id === detailTaskId) || null;
     const currentSprintObj = sprints.find(s => s.id === selectedSprintId);
 
-    // Фільтрація задач для дошки
     const filteredTasks = tasks.filter(t =>
         selectedSprintId === 'all' ? true : t.project === Number(id) && t.sprint === selectedSprintId
     );
 
-    // --- ЛОГІКА ЗАВЕРШЕННЯ СПРИНТА ---
-
-    // 1. Відкриваємо діалог
     const onCompleteClick = () => {
-        if (selectedSprintId !== 'all') {
-            setConfirmOpen(true);
-        }
+        if (selectedSprintId !== 'all') setConfirmOpen(true);
     };
 
-    // 2. Виконуємо дію після підтвердження
     const handleConfirmComplete = async () => {
         try {
             await dispatch(completeSprint(selectedSprintId as number)).unwrap();
-            // Оновлюємо задачі, бо частина піде в беклог
             if (id) dispatch(fetchTasks(id));
-            // Перемикаємось на "Всі задачі", бо спринт закрився
             setSelectedSprintId('all');
         } catch (error) {
             console.error("Помилка завершення спринта", error);
+        }
+    };
+
+    const handleDeleteProject = async () => {
+        if (!id) return;
+        try {
+            await dispatch(deleteProject(Number(id))).unwrap();
+            navigate('/dashboard');
+        } catch (error) {
+            console.error("Помилка видалення проєкту", error);
         }
     };
 
@@ -101,16 +98,41 @@ export const ProjectDetailsPage = () => {
 
     return (
         <Box>
-            {/* === HEADER === */}
             <Box display="flex" justifyContent="space-between" alignItems="center" mb={4}>
-                {/* Ліва частина: Назва + Учасники + Спринт */}
                 <Box>
-                    <Typography variant="h4" fontWeight="bold">
-                        {currentProject?.name || `Project #${id}`}
-                    </Typography>
+                    <Box display="flex" alignItems="center" gap={1}>
+                        <Typography variant="h4" fontWeight="bold">
+                            {currentProject?.name || `Project #${id}`}
+                        </Typography>
+
+                        <RoleGuard allowedRoles={['PM', 'ADMIN']}>
+                            <IconButton onClick={(e) => setAnchorEl(e.currentTarget)}>
+                                <SettingsIcon/>
+                            </IconButton>
+                            <Menu
+                                anchorEl={anchorEl}
+                                open={openMenu}
+                                onClose={() => setAnchorEl(null)}
+                            >
+                                <MenuItem onClick={() => {
+                                    setEditProjectOpen(true);
+                                    setAnchorEl(null);
+                                }}>
+                                    <ListItemIcon><EditIcon fontSize="small"/></ListItemIcon>
+                                    <ListItemText>Редагувати проєкт</ListItemText>
+                                </MenuItem>
+                                <MenuItem onClick={() => {
+                                    setDeleteProjectOpen(true);
+                                    setAnchorEl(null);
+                                }} sx={{color: 'error.main'}}>
+                                    <ListItemIcon><DeleteIcon fontSize="small" color="error"/></ListItemIcon>
+                                    <ListItemText>Видалити проєкт</ListItemText>
+                                </MenuItem>
+                            </Menu>
+                        </RoleGuard>
+                    </Box>
 
                     <Box display="flex" alignItems="center" gap={3} mt={1}>
-                        {/* Блок вибору спринта */}
                         <Box display="flex" alignItems="center" gap={1}>
                             <Typography variant="body2" color="text.secondary">Спринт:</Typography>
                             <Select
@@ -127,7 +149,6 @@ export const ProjectDetailsPage = () => {
                                 ))}
                             </Select>
 
-                            {/* КНОПКА КАЛЕНДАРЯ СПРИНТА */}
                             {selectedSprintId !== 'all' && (
                                 <Tooltip title="Відкрити хронологію та деталі спринту">
                                     <IconButton
@@ -141,7 +162,6 @@ export const ProjectDetailsPage = () => {
                             )}
                         </Box>
 
-                        {/* Блок учасників */}
                         <Box display="flex" alignItems="center" gap={1}>
                             <AvatarGroup max={5}
                                          sx={{'& .MuiAvatar-root': {width: 32, height: 32, fontSize: '0.8rem'}}}>
@@ -161,16 +181,14 @@ export const ProjectDetailsPage = () => {
                     </Box>
                 </Box>
 
-                {/* Права частина: Кнопки дій */}
                 <Box display="flex" gap={2}>
-                    {/* КНОПКА ЗАВЕРШЕННЯ СПРИНТА */}
                     <RoleGuard allowedRoles={['PM', 'ADMIN']}>
                         {selectedSprintId !== 'all' && currentSprintObj?.is_active && (
                             <Button
                                 variant="outlined"
                                 color="success"
                                 startIcon={<CheckIcon/>}
-                                onClick={onCompleteClick} // <--- Виклик діалогу
+                                onClick={onCompleteClick}
                             >
                                 Завершити спринт
                             </Button>
@@ -191,10 +209,8 @@ export const ProjectDetailsPage = () => {
                 </Box>
             </Box>
 
-            {/* Лоадер */}
             {tasksLoading && <LinearProgress sx={{mb: 2}}/>}
 
-            {/* === KANBAN BOARD === */}
             <BoardContainer>
                 {COLUMNS.map((column) => (
                     <KanbanColumn key={column.id} elevation={0}>
@@ -206,7 +222,6 @@ export const ProjectDetailsPage = () => {
                         </Box>
 
                         {filteredTasks.filter(task => task.status === column.id).map(task => {
-                            // Підрахунок багів
                             const bugs = task.bugs || [];
                             const activeBugs = bugs.filter(b => b.status !== 'CLOSED' && b.status !== 'FIXED').length;
                             const closedBugs = bugs.filter(b => b.status === 'CLOSED' || b.status === 'FIXED').length;
@@ -222,8 +237,6 @@ export const ProjectDetailsPage = () => {
                                                 variant="outlined"
                                                 sx={{height: 20, fontSize: '0.65rem'}}
                                             />
-
-                                            {/* ЧЕРВОНИЙ: Активні баги */}
                                             {activeBugs > 0 && (
                                                 <Tooltip title={`${activeBugs} активних помилок`}>
                                                     <Chip
@@ -235,8 +248,6 @@ export const ProjectDetailsPage = () => {
                                                     />
                                                 </Tooltip>
                                             )}
-
-                                            {/* ЗЕЛЕНИЙ: Виправлені баги */}
                                             {closedBugs > 0 && (
                                                 <Tooltip title={`${closedBugs} виправлених помилок`}>
                                                     <Chip
@@ -252,21 +263,18 @@ export const ProjectDetailsPage = () => {
                                         </Box>
                                         <IconButton size="small"><MoreHoriz fontSize="small"/></IconButton>
                                     </Box>
-
                                     <Typography variant="body1" fontWeight="500" gutterBottom>
                                         {task.title}
                                     </Typography>
-
                                     <Box display="flex" justifyContent="flex-end" alignItems="center" mt={2}>
                                         {task.assignee ? (
                                             <Tooltip title={task.assignee_details?.username || `User ${task.assignee}`}>
-                                                <Avatar
-                                                    sx={{
-                                                        width: 24,
-                                                        height: 24,
-                                                        fontSize: '0.75rem',
-                                                        bgcolor: 'primary.main'
-                                                    }}>
+                                                <Avatar sx={{
+                                                    width: 24,
+                                                    height: 24,
+                                                    fontSize: '0.75rem',
+                                                    bgcolor: 'primary.main'
+                                                }}>
                                                     {task.assignee_details?.username?.[0].toUpperCase() || '?'}
                                                 </Avatar>
                                             </Tooltip>
@@ -281,7 +289,6 @@ export const ProjectDetailsPage = () => {
                 ))}
             </BoardContainer>
 
-            {/* === MODALS === */}
             <TaskModal
                 open={Boolean(detailTask)}
                 onClose={() => setDetailTaskId(null)}
@@ -302,20 +309,34 @@ export const ProjectDetailsPage = () => {
             />
 
             {currentProject && (
-                <AddMemberModal
-                    open={isMembersOpen}
-                    onClose={() => setMembersOpen(false)}
-                    project={currentProject}
-                />
+                <>
+                    <AddMemberModal
+                        open={isMembersOpen}
+                        onClose={() => setMembersOpen(false)}
+                        project={currentProject}
+                    />
+                    <EditProjectModal
+                        open={isEditProjectOpen}
+                        onClose={() => setEditProjectOpen(false)}
+                        project={currentProject}
+                    />
+                </>
             )}
 
-            {/* ДІАЛОГ ПІДТВЕРДЖЕННЯ */}
             <ConfirmationDialog
                 open={isConfirmOpen}
                 onClose={() => setConfirmOpen(false)}
                 onConfirm={handleConfirmComplete}
                 title="Завершити спринт?"
                 description="Всі незавершені задачі будуть автоматично перенесені в Backlog. Спринт стане неактивним."
+            />
+
+            <ConfirmationDialog
+                open={isDeleteProjectOpen}
+                onClose={() => setDeleteProjectOpen(false)}
+                onConfirm={handleDeleteProject}
+                title="Видалити проєкт?"
+                description="Ви впевнені, що хочете видалити цей проєкт? Всі задачі, спринти та звіти будуть видалені назавжди."
             />
         </Box>
     );

@@ -5,19 +5,23 @@ import {
     DialogContent, DialogActions, Button, Typography,
     Select, MenuItem, FormControl, InputLabel, TextField,
     Avatar, Stack, Box, Divider, Alert, Snackbar,
-    List, ListItem, ListItemIcon, ListItemText, ListItemButton
+    List, ListItem, ListItemIcon, ListItemText, ListItemButton, IconButton
 } from '@mui/material';
-import {BugReport as BugIcon, Save as SaveIcon, Warning as WarningIcon, CheckCircle} from '@mui/icons-material';
+import {
+    BugReport as BugIcon, Save as SaveIcon, Warning as WarningIcon,
+    CheckCircle, Delete as DeleteIcon
+} from '@mui/icons-material';
 
 import {StyledDialog, HeaderBox} from './TaskModal.styles';
 import {RoleGuard} from '../../utils/rbac';
 import type {AppDispatch, RootState} from '../../store';
 import type {Task, BugReport} from '../../types';
-import {updateTask, fetchTasks} from '../../store/tasksSlice';
+import {updateTask, fetchTasks, deleteTask} from '../../store/tasksSlice';
 import api from '../../api/axios';
 
 import {ReportBugModal} from '../ReportBugModal/ReportBugModal';
 import {BugDetailsModal} from '../BugDetailsModal/BugDetailsModal';
+import {ConfirmationDialog} from '../ConfirmationDialog/ConfirmationDialog';
 
 interface TaskModalProps {
     open: boolean;
@@ -36,6 +40,8 @@ export const TaskModal = ({open, onClose, task}: TaskModalProps) => {
     const [successMsg, setSuccessMsg] = useState('');
 
     const [isBugModalOpen, setBugModalOpen] = useState(false);
+    const [isDeleteConfirmOpen, setDeleteConfirmOpen] = useState(false); // <--- Стейт видалення
+
     const [selectedBug, setSelectedBug] = useState<BugReport | null>(null);
     const [snackbarOpen, setSnackbarOpen] = useState(false);
 
@@ -58,7 +64,8 @@ export const TaskModal = ({open, onClose, task}: TaskModalProps) => {
                 priority: task.priority,
                 story_points: task.story_points,
                 assignee: task.assignee || "",
-                sprint: task.sprint || ""
+                sprint: task.sprint || "",
+                due_date: task.due_date || "" // <--- Заповнюємо дату
             });
             setSuccessMsg('');
         }
@@ -72,6 +79,7 @@ export const TaskModal = ({open, onClose, task}: TaskModalProps) => {
             Object.assign(payload, data);
             if (payload.assignee === "") payload.assignee = null;
             if (payload.sprint === "") payload.sprint = null;
+            if (payload.due_date === "") payload.due_date = null; // Обробка дати
         } else if (isDev) {
             payload.status = data.status;
         }
@@ -85,6 +93,13 @@ export const TaskModal = ({open, onClose, task}: TaskModalProps) => {
             }, 1000);
         } catch (e) {
             console.error("Failed to update task", e);
+        }
+    };
+
+    const handleDelete = async () => {
+        if (task) {
+            await dispatch(deleteTask(task.id));
+            onClose(); // Закриваємо вікно після видалення
         }
     };
 
@@ -104,6 +119,7 @@ export const TaskModal = ({open, onClose, task}: TaskModalProps) => {
             <StyledDialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
                 <form onSubmit={handleSubmit(onSubmit)}>
                     <DialogContent>
+                        {/* Header */}
                         <HeaderBox>
                             <Box sx={{flexGrow: 1, mr: 2}}>
                                 <Typography variant="caption" color="text.secondary">TASK-{task.id}</Typography>
@@ -123,10 +139,7 @@ export const TaskModal = ({open, onClose, task}: TaskModalProps) => {
 
                             <RoleGuard allowedRoles={['QA']}>
                                 <Button
-                                    variant="outlined"
-                                    color="error"
-                                    size="small"
-                                    startIcon={<BugIcon/>}
+                                    variant="outlined" color="error" size="small" startIcon={<BugIcon/>}
                                     onClick={() => setBugModalOpen(true)}
                                     sx={{whiteSpace: 'nowrap', minWidth: '130px', height: 'fit-content'}}
                                 >
@@ -154,32 +167,45 @@ export const TaskModal = ({open, onClose, task}: TaskModalProps) => {
 
                         <Typography variant="caption" color="text.secondary"
                                     sx={{mb: 1, display: 'block'}}>ПЛАНУВАННЯ</Typography>
-                        <FormControl fullWidth size="small" sx={{mb: 3}}>
-                            <InputLabel shrink>Спринт</InputLabel> {/* Shrink fix */}
-                            <Controller
-                                name="sprint"
-                                control={control}
-                                render={({field}) => (
-                                    <Select
-                                        {...field} label="Спринт" displayEmpty disabled={!isPM}
-                                        renderValue={(selected) => {
-                                            if (selected === "" || selected === null) return <em
-                                                style={{color: 'gray'}}>Backlog</em>;
-                                            const sprint = sprints.find(s => s.id === selected);
-                                            return sprint ? `${sprint.name} ${sprint.is_active ? '(Active)' : ''}` : selected;
-                                        }}
-                                    >
-                                        <MenuItem value=""><em>Backlog</em></MenuItem>
-                                        {sprints.map(s => <MenuItem key={s.id}
-                                                                    value={s.id}>{s.name} {s.is_active ? '(Active)' : ''}</MenuItem>)}
-                                    </Select>
-                                )}
+
+                        <Box display="flex" gap={2} mb={3}>
+                            <FormControl fullWidth size="small">
+                                <InputLabel shrink>Спринт</InputLabel>
+                                <Controller
+                                    name="sprint"
+                                    control={control}
+                                    render={({field}) => (
+                                        <Select
+                                            {...field} label="Спринт" displayEmpty disabled={!isPM}
+                                            renderValue={(selected) => {
+                                                if (selected === "" || selected === null) return <em
+                                                    style={{color: 'gray'}}>Backlog</em>;
+                                                const sprint = sprints.find(s => s.id === selected);
+                                                return sprint ? `${sprint.name} ${sprint.is_active ? '(Active)' : ''}` : selected;
+                                            }}
+                                        >
+                                            <MenuItem value=""><em>Backlog</em></MenuItem>
+                                            {sprints.map(s => <MenuItem key={s.id}
+                                                                        value={s.id}>{s.name} {s.is_active ? '(Active)' : ''}</MenuItem>)}
+                                        </Select>
+                                    )}
+                                />
+                            </FormControl>
+
+                            <TextField
+                                label="Дедлайн"
+                                type="date"
+                                fullWidth
+                                size="small"
+                                disabled={!isPM}
+                                InputLabelProps={{shrink: true}}
+                                {...register('due_date')}
                             />
-                        </FormControl>
+                        </Box>
 
                         <Stack direction="row" spacing={2} sx={{mb: 3}}>
                             <FormControl fullWidth size="small">
-                                <InputLabel shrink>Статус</InputLabel> {/* Shrink fix */}
+                                <InputLabel shrink>Статус</InputLabel>
                                 <Controller
                                     name="status"
                                     control={control}
@@ -195,7 +221,7 @@ export const TaskModal = ({open, onClose, task}: TaskModalProps) => {
                                 />
                             </FormControl>
                             <FormControl fullWidth size="small">
-                                <InputLabel shrink>Priority</InputLabel> {/* Shrink fix */}
+                                <InputLabel shrink>Priority</InputLabel>
                                 <Controller
                                     name="priority"
                                     control={control}
@@ -262,7 +288,6 @@ export const TaskModal = ({open, onClose, task}: TaskModalProps) => {
                             <Typography variant="h6">{task.story_points} SP</Typography>
                         )}
 
-                        {/* === СПИСОК БАГІВ === */}
                         {task.bugs && task.bugs.length > 0 && (
                             <>
                                 <Divider sx={{my: 2}}/>
@@ -270,7 +295,6 @@ export const TaskModal = ({open, onClose, task}: TaskModalProps) => {
                                             sx={{mb: 1, display: 'block', fontWeight: 'bold'}}>
                                     ЗНАЙДЕНІ ПОМИЛКИ ({task.bugs.length})
                                 </Typography>
-
                                 <List dense sx={{bgcolor: '#fff4f4', borderRadius: 1}}>
                                     {task.bugs.map((bug: BugReport) => {
                                         const isClosed = bug.status === 'CLOSED' || bug.status === 'FIXED';
@@ -278,26 +302,17 @@ export const TaskModal = ({open, onClose, task}: TaskModalProps) => {
                                             <ListItem key={bug.id} disablePadding>
                                                 <ListItemButton onClick={() => setSelectedBug(bug)}>
                                                     <ListItemIcon sx={{minWidth: 30}}>
-                                                        {bug.status === 'FIXED' ? (
-                                                            <CheckCircle color="success" fontSize="small"/>
-                                                        ) : (
+                                                        {bug.status === 'FIXED' ?
+                                                            <CheckCircle color="success" fontSize="small"/> :
                                                             <WarningIcon color={isClosed ? "disabled" : "error"}
-                                                                         fontSize="small"/>
-                                                        )}
+                                                                         fontSize="small"/>}
                                                     </ListItemIcon>
                                                     <ListItemText
-                                                        primary={
-                                                            <Typography
-                                                                variant="body2"
-                                                                sx={{
-                                                                    textDecoration: isClosed ? 'line-through' : 'none',
-                                                                    color: isClosed ? 'text.disabled' : 'text.primary',
-                                                                    fontWeight: 500
-                                                                }}
-                                                            >
-                                                                {bug.title}
-                                                            </Typography>
-                                                        }
+                                                        primary={<Typography variant="body2" sx={{
+                                                            textDecoration: isClosed ? 'line-through' : 'none',
+                                                            color: isClosed ? 'text.disabled' : 'text.primary',
+                                                            fontWeight: 500
+                                                        }}>{bug.title}</Typography>}
                                                         secondary={bug.status === 'NEW' ? bug.priority : `${bug.priority} | ${bug.status}`}
                                                     />
                                                 </ListItemButton>
@@ -309,36 +324,51 @@ export const TaskModal = ({open, onClose, task}: TaskModalProps) => {
                         )}
 
                     </DialogContent>
-                    <DialogActions>
-                        <Button onClick={onClose}>Закрити</Button>
-                        {(isPM || isDev) && (
-                            <Button type="submit" color="primary" variant="contained"
-                                    startIcon={<SaveIcon/>}>Зберегти</Button>
-                        )}
+                    <DialogActions sx={{justifyContent: 'space-between'}}>
+
+                        <Box>
+                            <RoleGuard allowedRoles={['PM', 'ADMIN']}>
+                                <Button
+                                    color="error"
+                                    startIcon={<DeleteIcon/>}
+                                    onClick={() => setDeleteConfirmOpen(true)} // Відкрити діалог
+                                >
+                                    Видалити
+                                </Button>
+                            </RoleGuard>
+                        </Box>
+
+                        <Box>
+                            <Button onClick={onClose} sx={{mr: 1}}>Закрити</Button>
+                            {(isPM || isDev) && (
+                                <Button type="submit" color="primary" variant="contained"
+                                        startIcon={<SaveIcon/>}>Зберегти</Button>
+                            )}
+                        </Box>
                     </DialogActions>
                 </form>
             </StyledDialog>
 
             <ReportBugModal
-                open={isBugModalOpen}
-                onClose={() => setBugModalOpen(false)}
-                onSuccess={handleBugSuccess}
-                projectId={task.project}
-                taskId={task.id}
-                taskTitle={task.title}
+                open={isBugModalOpen} onClose={() => setBugModalOpen(false)} onSuccess={handleBugSuccess}
+                projectId={task.project} taskId={task.id} taskTitle={task.title}
             />
 
             <BugDetailsModal
-                open={Boolean(selectedBug)}
-                onClose={() => setSelectedBug(null)}
-                bug={selectedBug}
+                open={Boolean(selectedBug)} onClose={() => setSelectedBug(null)} bug={selectedBug}
                 onUpdate={handleBugUpdate}
             />
 
+            <ConfirmationDialog
+                open={isDeleteConfirmOpen}
+                onClose={() => setDeleteConfirmOpen(false)}
+                onConfirm={handleDelete}
+                title="Видалити задачу?"
+                description={`Ви дійсно хочете видалити задачу "TASK-${task.id}"? Цю дію не можна скасувати.`}
+            />
+
             <Snackbar
-                open={snackbarOpen}
-                autoHideDuration={4000}
-                onClose={() => setSnackbarOpen(false)}
+                open={snackbarOpen} autoHideDuration={4000} onClose={() => setSnackbarOpen(false)}
                 anchorOrigin={{vertical: 'bottom', horizontal: 'center'}}
             >
                 <Alert onClose={() => setSnackbarOpen(false)} severity="success" sx={{width: '100%'}}>
